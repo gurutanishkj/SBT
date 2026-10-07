@@ -1,0 +1,234 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  phone         String
+  password      String
+  role          String         @default("USER") // USER, ADMIN
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  bookings      Booking[]
+  favorites     Favorite[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Theatre {
+  id          String   @id @default(uuid())
+  name        String   // "SATHYABAMA MULTIPLEX (SBT CINEMAS)"
+  city        String   // "Kovilpatti"
+  address     String   // "Kovilpatti Main Road, Iluppaiyurani, Near Sangeetha Dresses, Kovilpatti, Tamil Nadu 628501, India"
+  active      Boolean  @default(true)
+  facilities  String   // JSON or comma separated: 4K Laser, Dolby Atmos, 3D, Parking, Gourmet Snacks
+  phone       String?  @default("+91 4632 220000")
+  email       String?  @default("support@sbtcinemas.com")
+  screens     Screen[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("theatres")
+}
+
+model Screen {
+  id             String   @id @default(uuid())
+  theatreId      String
+  theatre        Theatre  @relation(fields: [theatreId], references: [id], onDelete: Cascade)
+  name           String   // e.g. "Screen 1 - 4K Dolby Atmos"
+  screenNumber   Int
+  totalSeats     Int      @default(150)
+  soundSystem    String   @default("Dolby Atmos")
+  projectionType String   @default("4K Laser")
+  active         Boolean  @default(true)
+  seats          Seat[]
+  shows          Show[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("screens")
+}
+
+model Seat {
+  id           String        @id @default(uuid())
+  screenId     String
+  screen       Screen        @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  row          String        // 'A' to 'J'
+  number       Int           // 1 to 15
+  seatCode     String        // 'A1', 'A2', 'J10'
+  tier         String        // "CLASSIC", "PREMIUM", "RECLINER"
+  basePrice    Float         @default(150)
+  active       Boolean       @default(true)
+  bookingSeats BookingSeat[]
+
+  @@unique([screenId, seatCode])
+  @@map("seats")
+}
+
+model Movie {
+  id            String     @id @default(uuid())
+  title         String
+  originalTitle String?
+  language      String     @default("Tamil")
+  format        String     @default("2D") // 2D, 3D
+  certificate   String     @default("UA13+") // U, UA13+, UA16+, A
+  genre         String     // Action, Drama, etc.
+  duration      Int        // in minutes
+  rating        Float      @default(8.5)
+  releaseDate   String     // YYYY-MM-DD
+  status        String     @default("NOW_SHOWING") // NOW_SHOWING, COMING_SOON
+  description   String
+  director      String
+  cast          String
+  posterUrl     String
+  backdropUrl   String
+  trailerUrl    String?
+  active        Boolean    @default(true)
+  shows         Show[]
+  favorites     Favorite[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@map("movies")
+}
+
+model Show {
+  id            String        @id @default(uuid())
+  movieId       String
+  movie         Movie         @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  screenId      String
+  screen        Screen        @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  date          String        // YYYY-MM-DD
+  startTime     String        // e.g. "10:30 AM", "02:20 PM", "06:20 PM", "10:15 PM"
+  endTime       String?
+  priceClassic  Float         @default(150)
+  pricePremium  Float         @default(190)
+  priceRecliner Float         @default(250)
+  active        Boolean       @default(true)
+  bookings      Booking[]
+  bookingSeats  BookingSeat[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("shows")
+}
+
+model Booking {
+  id             String        @id @default(uuid())
+  bookingCode    String        @unique // e.g. "SBT-8F42K9"
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  showId         String
+  show           Show          @relation(fields: [showId], references: [id], onDelete: Cascade)
+  totalAmount    Float
+  convenienceFee Float         @default(35.40)
+  foodAmount     Float         @default(0)
+  status         String        @default("CONFIRMED") // CONFIRMED, CANCELLED
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  bookingSeats   BookingSeat[]
+  payment        Payment?
+  foodOrders     FoodOrder[]
+
+  @@map("bookings")
+}
+
+model BookingSeat {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  seatId    String
+  seat      Seat    @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  showId    String
+  show      Show    @relation(fields: [showId], references: [id], onDelete: Cascade)
+  seatCode  String
+  price     Float
+
+  @@unique([showId, seatId]) // Atomic database constraint to strictly prevent double booking
+  @@map("booking_seats")
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  transactionId String   @unique // e.g. "TXN-984210"
+  method        String   // UPI, CARD, NET_BANKING, WALLET
+  amount        Float
+  status        String   @default("SUCCESS") // SUCCESS, FAILED
+  createdAt     DateTime @default(now())
+
+  @@map("payments")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movieId   String
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, movieId])
+  @@map("favorites")
+}
+
+model FoodItem {
+  id          String      @id @default(uuid())
+  name        String      // Popcorn, Large Popcorn, Nachos, Soft Drink, Combo, Premium Combo
+  category    String      // Snacks, Beverages, Combos
+  price       Float
+  description String
+  imageUrl    String
+  active      Boolean     @default(true)
+  foodOrders  FoodOrder[]
+
+  @@map("food_items")
+}
+
+model FoodOrder {
+  id         String   @id @default(uuid())
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  foodItemId String
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+  quantity   Int
+  unitPrice  Float
+
+  @@map("food_orders")
+}
+
+model Offer {
+  id            String   @id @default(uuid())
+  code          String   @unique // WEEKEND50, STUDENT20, MOVIENIGHT, COMBO25
+  title         String
+  description   String
+  discountType  String   // PERCENTAGE, FLAT
+  discountValue Float
+  minAmount     Float    @default(0)
+  maxDiscount   Float    @default(150)
+  validTill     DateTime
+  active        Boolean  @default(true)
+
+  @@map("offers")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
